@@ -1,0 +1,630 @@
+LoadPackage("fining");
+#############################################################################
+#Given a Vector, It Creates a Matrix of the Given Sizes
+#############################################################################
+CreateMatrix := function(vector, row, column)
+	local Matrix, j;
+	Matrix := List( [1..row], j -> vector{ [1+(column)*(j-1)..column*j] });
+	return Matrix;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+
+#############################################################################
+#Generates the Set of Homogeneous Polynomials of Degree K
+#############################################################################
+DegreeKHomogeneousPolynomials := function(q,k)
+	local i, j, b, c, n, field, termsx, termsy, tterms, terms, coefficients, coeff, temp, polynomials, result;
+	
+	field := GF(q);
+
+	#Create all possible terms of an homogeneous polynomial
+	tterms := [];
+	termsx := List([0..q], i->-i+q);
+	termsy := [0..q];
+	for b in termsx do
+		for c in termsy do
+			Add(tterms, [b,c]);
+		od;
+	od;
+	
+	#Eliminate the terms that are not equal to k
+	terms := [];
+	for n in [1..Length(tterms)] do
+		if tterms[n][1]+tterms[n][2] = k then
+			Add(terms, tterms[n]);
+		fi;
+	od;
+	
+	#Create the all possible combinations of coefficients
+	coefficients := UnorderedTuples(Set(field),Length(terms));
+
+	#Create the Polynomials
+	polynomials := [];
+	result := [];
+	for coeff in coefficients do
+		temp := [];
+		for j in [1..Length(coeff)] do
+			if not coeff[j] = 0*One(field) then
+				Append(temp, [[coeff[j],terms[j][1],terms[j][2]]]);
+			fi;
+		od;
+		if temp in polynomials then
+			Add(result, temp);
+		else
+			Add(polynomials, temp);
+		fi;
+	od;
+	
+	
+	return polynomials;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Generates the Set of Homogeneous Polynomials Up To Degree K
+#############################################################################
+HomogeneousPolynomialsSetUpToDegreeK := function(q, k)
+	local i, a, result;
+	
+	a := k-1;
+	result := [];
+	for i in [0..a] do
+		Append(result, DegreeKHomogeneousPolynomials(q, i));
+	od;
+	
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Evaluates the Polynomial at Alpha
+#############################################################################
+Evaluation := function(polynomial, alpha)
+	local coordinate, i, j, result;
+	
+	result := [];
+	
+	coordinate := 0;
+	for i in [1..Length(alpha[1])] do
+		coordinate := 0;
+		for j in [1..Length(polynomial)] do
+			coordinate := coordinate + polynomial[j][1]*(alpha[1][i]^polynomial[j][2]);
+		od;
+		Add(result, coordinate);
+	od;
+	
+	return [result];
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+# Given the Necessary Data Generates the Cauchy Code
+#############################################################################
+CauchyCode := function(q, k, alpha, beta)
+	local V, field, polynomials, polynomial, vector, v, n, m, basis, i, vec, count, W, Z, result, set;
+
+	if not Length(alpha[1])=Length(beta[1]) then
+		Error("Incompatible Lists","\n");
+	fi;
+
+	set := [];
+	field := GF(q);
+	V := FullMatrixSpace(field, 1,Length(alpha[1]));
+	
+	#Calculate the Cauchy Code as a Set
+	polynomials := HomogeneousPolynomialsSetUpToDegreeK(q, k);
+	vector := [];
+	for polynomial in polynomials do
+		vector := [];
+		v := Evaluation(polynomial, alpha)[1];
+		for m in [1..Length(beta[1])] do
+			v[m] := v[m]*beta[1][m];
+		od;		
+		v := v*One(field);
+		Add(set, [v]);
+	od;
+	
+	basis := [set[2]];
+	#Choose a Basis
+	for i in [3..Length(set)] do
+		W := Subspace(V, basis);
+		Z := Subspace(V, [set[i]]);
+		if IsSubspace( W, Z ) = false then
+			Add(basis, set[i]);
+		fi;
+	od;
+	
+	#Create the Vector Subspace
+	result := Subspace(V, basis);
+	
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Given a Linear Code Finds a Generator Matrix
+#############################################################################
+GeneratorMatrix := function(C)
+	local basis, matrix, i;
+
+	basis := GeneratorsOfLeftOperatorAdditiveGroup(C);
+	
+	matrix := [];
+	for i in [1..Length(basis)] do
+		Add(matrix, basis[i][1]);
+	od;
+	return matrix;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+
+#############################################################################
+#Generates the Orthogonal Complement of a Linear Code, i.e, the Dual Code
+#############################################################################
+DualLinearCode := function(C)
+	local BasisOfCode, RowSpaceMatrixOfCode, RowSpaceMatrixOfDual, BasisOfOrt, vec, i, V, result;
+	
+	BasisOfCode := GeneratorsOfLeftOperatorAdditiveGroup(C);
+	RowSpaceMatrixOfCode := [];
+	for vec in BasisOfCode do
+		 Add(RowSpaceMatrixOfCode, vec[1]);
+	od;
+	
+	RowSpaceMatrixOfDual := BaseOrthogonalSpaceMat(RowSpaceMatrixOfCode);
+	BasisOfOrt := [];
+	for i in [1..Length(RowSpaceMatrixOfDual)] do
+		Add(BasisOfOrt, [RowSpaceMatrixOfDual[i]]);
+	od;
+
+	V := ParentAttr(C);
+	result := Subspace(V,BasisOfOrt);
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Given a Linear Code Finds a Parity Check Matrix
+#############################################################################			
+ParityCheckMatrix := function(C)
+	local Dual, CheckMatrix;
+	
+	Dual := DualLinearCode(C);
+	CheckMatrix := GeneratorMatrix(Dual);
+	
+	return CheckMatrix;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+
+#############################################################################
+#Given Two Matrices and a Linear Code Generates the Image of Phi(V,W)
+#############################################################################
+phi := function(V, C, W)
+	local set, c, a, b, basis, i, P, Z, O, result;
+	
+	#Calculate the New Code as a Set
+	set := [];
+	for c in C do
+		Add(set, V*DiagonalMat(c[1])*TransposedMat(W));
+	od;
+	
+	#Create the New Vector Space
+	a := DimensionsMat(V)[1];
+	b := DimensionsMat(W)[1];
+	O := FullMatrixSpace(LeftActingDomain(ParentAttr(C)),a,b);
+	
+	basis := [set[2]];
+	#Choose a Basis
+	while Length(basis) < Length(GeneratorsOfLeftOperatorAdditiveGroup(C)) do
+		for i in [3..Length(set)] do
+			P := Subspace(O, basis);
+			Z := Subspace(O, [set[i]]);
+			if IsSubspace( P, Z ) = false then
+				Add(basis, set[i]);
+			fi;
+		od;
+	od;
+
+	#Create the Vector Subspace
+	result := Subspace(O, basis);
+	
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Given a Code, Returns the Minimum Distance of the Code
+#############################################################################
+MinimumDistance := function(C)
+	local ranks, c;
+	
+	ranks := [];
+	for c in C do
+		Add(ranks, RankMat(c));
+	od;
+	Sort(ranks);
+	return ranks[2];
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#It Checks Whether a Code is MRD Code or Not
+#############################################################################
+IsMRD := function(C)
+	local Basis, Dimensions;
+	Basis := GeneratorsOfLeftOperatorAdditiveGroup(C);
+	Dimensions := DimensionsMat(Basis[1]);
+	if Length(Basis) = Dimensions[1]*(Dimensions[2]-MinimumDistance(C)+1) then
+		return true;
+	else
+		return false;
+	fi;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Creates the Set of All Rank-1 Matrices for Small Fields
+#############################################################################
+CreateRank1Matrices := function(field, n1, n2)
+	local V1,V2, m, m2, a, pos, result;
+	V1 := FullMatrixSpace(field, 1, n1);
+	V2 := FullMatrixSpace(field, 1, n2);
+	result := [];
+	
+	#I do not want large fields
+	if not Length(Set(field)) < 5 then
+		Error("Incompatible Lists","\n");
+	fi;
+
+	for m in Set(V1) do
+		if not m = Zero(V1) then
+			for m2 in Set(V2) do
+				if not m2 = Zero(V2) then
+					a:= TransposedMat(m)*m2;
+					Add(result,a);
+				fi;
+			od;
+		fi;
+	od;
+
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Creates The Generators of the Group That Stabilizes the Set of Rank-1 Matrices
+#############################################################################
+ActOnBasis := function(D, Space)
+	local BasissOfSpace, GeneratorsOfD, prG, prH, resultmatrices, groupelement, matrix, resultbasis, i, newbasiselement; 
+	
+	BasissOfSpace := ShallowCopy(Basis(Space));
+	GeneratorsOfD := GeneratorsOfMagmaWithInverses(D);
+	prG := Projection(D,1);
+	prH := Projection(D,2);
+	
+	#Let the generators of D=GxH act on the basis of the Tensor 
+	#and create their Matrix Representations
+	resultmatrices := [];
+	for groupelement in GeneratorsOfD do
+		matrix := [];
+		resultbasis := Image(prG,groupelement)*BasissOfSpace*TransposedMat(Image(prH,groupelement));
+		#resultbasis := Filtered(resultbasis, i -> i in Tensor);
+		
+		for newbasiselement in resultbasis do
+			Add(matrix, Coefficients(Basis(Space), newbasiselement));
+		od;
+		Add(resultmatrices, matrix);
+	od;
+
+	return resultmatrices;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Using the Function "ActOnBasis", Generates the Group
+#############################################################################
+MatrixGroup := function(q,N1,N2)
+	local G, H, DP, V, GeneratorsOfGroup, result;
+
+	#Groups
+	G := GL(N1, q);
+	H := GL(N2, q); 
+	DP := DirectProduct(G,H);
+	V:= FullMatrixSpace(GF(q),N1,N2);
+	
+	#Matrix Group
+	GeneratorsOfGroup := ActOnBasis(DP, V);
+	result := Group(GeneratorsOfGroup);
+
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Projectifies the Matrix Group Generated by the Function "MatrixGroup"
+#############################################################################
+ProjectiveMatrixGroup:=function(q,N1,N2)
+	local MatGroup, GeneratorsOfGroup, pg, ProjectivitiesOfTheGeneratorsOfGroup, generator;
+	
+	MatGroup := MatrixGroup(q,N1,N2);
+	GeneratorsOfGroup := GeneratorsOfMagmaWithInverses(MatGroup);
+	pg := PG(N1*N2-1,q);
+	
+	ProjectivitiesOfTheGeneratorsOfGroup := [];
+	for generator in GeneratorsOfGroup do
+		Add(ProjectivitiesOfTheGeneratorsOfGroup, Projectivity(pg,generator));
+	od;
+
+	return Group(ProjectivitiesOfTheGeneratorsOfGroup);
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Flats the Whole Code
+#############################################################################
+FlatTheCode := function(C)
+	local N1, N2, Generators, k, F, V;
+	N1 := DimensionOfVectors(C)[1];
+	N2 := DimensionOfVectors(C)[2];
+	Generators := List(Basis(C), i-> Flat(i));
+	k := N1*N2;
+	F := LeftActingDomain(C);
+	V := F^k;
+	return Subspace(V,Generators);
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Projectifies the Given Code C
+#############################################################################	
+ProjectifyTheCode := function(C)
+	local N1, N2, q, pg, BasisOfCode;
+	
+	N1 := DimensionOfVectors(C)[1];
+	N2 := DimensionOfVectors(C)[2];
+	q := Size(LeftActingDomain(C));
+	pg := PG(N1*N2-1,q);
+	BasisOfCode := List(Basis(C),i->Flat(i));
+
+	return VectorSpaceToElement(pg,BasisOfCode);
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#This Function is Used in the Function "DataForGTR"
+#############################################################################	
+CheckEmpty := function(list)
+	if IsEmpty(list)=true then
+		return [0];
+	else
+		return [1];
+	fi;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Given a List of Equivalence Classes, Returns Combined Orbits of All Equivalence Classes
+#############################################################################	
+CreateOrbits := function(H, D)
+	local Orbits, i;
+	
+	Orbits := [];
+	for i in D do
+		if not i=[] then
+			Append(Orbits,FiningOrbits(H,i));
+		fi;
+	od;
+
+	return Orbits;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#This Function is Used in the Inductive Step of the Function "DataForGTR"
+#############################################################################	
+CreateTheObjectsOfTheNextLevel := function(PointsOfSegreVar, Orbits)
+	local Representativess, ObjectsOfTheNextLevel, rep, NewPointsOfSegreVar, NewObjects;
+	
+	#Choose Representatives From Orbits
+	Representativess := List(Orbits, i->i[1]);
+	
+	#Create The Next Level
+	ObjectsOfTheNextLevel := [];
+	for rep in Representativess do
+		NewPointsOfSegreVar := Filtered(PointsOfSegreVar, x-> not x in rep);
+		NewObjects := List(NewPointsOfSegreVar, x-> Span(x,rep));
+		Append(ObjectsOfTheNextLevel, NewObjects);
+	od;
+
+	return ObjectsOfTheNextLevel;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Returns the Data For Generalized Tensor Ranks and Minimum Subspace That Contains the Code
+#############################################################################	
+DataForGTR := function(C, H)
+	local DimensionOfTheCode, PC, N1, N2, F, q, SegreVar, PointsOfSegreVar, V, DimensionOfTheBigSpace, GeneralizedTensorRanks, IntersectionInfoForGTR, ResultingSpace, D, d, point, count, count2, j, Orbits, ObjectsOfTheNextLevel, object, k, Infoo, x, m, n;                         
+
+	#Define The Parameters
+	DimensionOfTheCode := Dimension(C);
+	V := ParentAttr(C);
+	DimensionOfTheBigSpace := Dimension(V);
+	PC := ProjectifyTheCode(C);
+	N1 := DimensionOfVectors(C)[1];
+	N2 := DimensionOfVectors(C)[2];
+	F := LeftActingDomain(C);
+	q := Size(F);
+	SegreVar := SegreVariety([PG(N1-1,q),PG(N2-1,q)]);
+	PointsOfSegreVar := AsList(PointsOfSegreVariety(SegreVar));
+	GeneralizedTensorRanks := [];
+	IntersectionInfoForGTR := [[[],[]]];
+	ResultingSpace := [];
+
+	#Prepare the Levels
+	D := [];
+	for d in [1..DimensionOfTheBigSpace] do
+		Add(D, List([1..d+1], i-> []));
+	od;
+
+	#Create the First Level, D_1
+	for point in PointsOfSegreVar do
+		if point in PC then
+			Add(D[1][2],point);
+		else 
+			Add(D[1][1],point);
+		fi;
+	od;
+
+	#Note the Intersection Info For the First Level
+	if not D[1][1]=[] then
+		Add(IntersectionInfoForGTR[1][1],1);
+	else
+		Add(IntersectionInfoForGTR[1][1],0);
+	fi;
+	if not D[1][2]=[] then
+		Add(IntersectionInfoForGTR[1][2],1);
+	else
+		Add(IntersectionInfoForGTR[1][2],0);
+	fi;
+
+	#Create the Other Levels Inductively
+	count := 0;
+	count2 := 0;
+	for j in [2..Length(D)] do
+		Orbits := CreateOrbits(H, D[j-1-count2]);
+		Remove(D,j-1-count2);
+		count2 := count2+1;
+		ObjectsOfTheNextLevel := CreateTheObjectsOfTheNextLevel(PointsOfSegreVar, Orbits);
+		for object in ObjectsOfTheNextLevel do
+			k := ProjectiveDimension(Meet(PC,object));
+			if k = ProjectiveDimension(PC) then
+				count := 1;
+				Add(ResultingSpace, object);
+			fi;
+			Add(D[j-count2][k+2],object);
+		od;
+		Infoo := List(D[j-count2], CheckEmpty);
+		Add(IntersectionInfoForGTR, Infoo);
+		if count=1 then
+			break;
+		fi;
+	od;
+
+
+	#Collect The Information For The Generalized Tensor Rank
+	for m in [1..DimensionOfTheCode] do
+		if Length(GeneralizedTensorRanks)=DimensionOfTheCode then
+			break;
+		fi;
+		for n in [m..Length(IntersectionInfoForGTR)] do
+			if not IntersectionInfoForGTR[n][m+1]=[0] then
+				Add(GeneralizedTensorRanks,n);
+				break;
+			fi;
+		od;
+	od;
+
+	return [GeneralizedTensorRanks, ResultingSpace, PointsOfSegreVar];
+
+end;		
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Returns the Generalized Tensor Ranks 
+#############################################################################	
+GTR := function(C,H)
+	local Data;
+	
+	Data := DataForGTR(C,H);
+	return Data[1];
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Returns the Minimum Subspace That Contains the Code C
+#############################################################################	
+MinimumSubspace := function(C,H)
+	local V, N1, N2, Data, ProjectiveSubspace, DimensionOfVectorSubspace, PointsOfSegreVar, PointsOfTheProjectiveSpace, Rank1Points, i, DesiredCombination, EveryCombination, combination, VectorSpaces, AsAList, Representatives, MatrixForm, MinSubspace;
+
+	V := ParentAttr(C);
+	N1 := DimensionOfVectors(C)[1];
+	N2 := DimensionOfVectors(C)[2];
+	Data := DataForGTR(C,H);
+	ProjectiveSubspace := Data[2][1];
+	DimensionOfVectorSubspace := ProjectiveDimension(ProjectiveSubspace) + 1;
+	PointsOfSegreVar := Data[3];
+	PointsOfTheProjectiveSpace := ShallowCopy(AsList(Points(ProjectiveSubspace)));
+	
+	#Remove Non-Rank1 Matrices From The Points
+	Rank1Points := Filtered(PointsOfTheProjectiveSpace, i-> i in PointsOfSegreVar);
+	
+	#Find the Combination of Rank1Points That Spans ProjectiveSubspace
+	DesiredCombination := 0;
+	EveryCombination := UnorderedTuples(Rank1Points,DimensionOfVectorSubspace);
+	for combination in EveryCombination do
+		if Span(combination) = ProjectiveSubspace then
+			DesiredCombination := combination;
+			break;
+		fi;
+	od;
+	
+	#Create The Corresponding Vector Space
+	VectorSpaces := List(DesiredCombination,point->UnderlyingVectorSpace(point));
+	AsAList := List(VectorSpaces, i-> AsList(i));
+	Representatives := List(AsAList, i-> ShallowCopy(i[2]));
+	MatrixForm := List(Representatives, i->CreateMatrix(i, N1, N2));
+	MinSubspace := Subspace(V,MatrixForm);
+
+	return MinSubspace;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+

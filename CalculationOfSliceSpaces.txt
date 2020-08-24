@@ -1,0 +1,81 @@
+#############################################################################
+# It takes 3 lists of vectors and gives the tensor as an element of F^{kxnxm}
+#############################################################################
+RepresentTensor := function(l1, l2, l3, N1, N2, N3, R, field)
+	local result, i, j, l, r, x;
+	# We expect the same length from each list
+	if not Length(l1)=Length(l2) and Length(l2)=Length(l3) then
+		Error("Incompatible Lists","\n");
+	fi;
+	#We are going to use the identification explained in 2.1 (LaTeX File)
+	result := [];
+	x := 0;
+	for i in [1..N1] do
+		for j in [1..N2] do
+			for l in [1..N3] do
+				for r in [1..R] do
+					# Here x is the x_{ijl} coordinate 
+					x := x + l1[r][i]*l2[r][j]*l3[r][l];	
+				od;
+				Append(result, [x]);
+				x := 0;
+			od;
+		od;
+	od;
+	return result*One(field);
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+# Given a Tensor and the Dimensions, It Calculates the i-th Slice Space
+#############################################################################
+SliceSpace := function(tensor, N1, N2, N3, i)
+	local firstDivision, secondDivision,shallow,pos, j, k, r, field, V, W;
+	if i = 1 then
+		#firstDivision basically means the part in the LATEX FILE BLABLA
+		firstDivision := List( [1..N1], j-> tensor{ [1+(N2*N3)*(j-1)..(N2*N3)*j] } );
+
+		#secondDivision actually gives us the basis for the slice space (in matrix form)
+		secondDivision := [];
+		for k in firstDivision do
+			Add(secondDivision, List([1..N2],j->k{[1+N3*(j-1)..N3*j]}));
+		od;
+
+		#We define the Matrix Vector Space according to the base field of our tensor,
+		#create the subspace and return it
+		field := DefaultFieldOfMatrix(secondDivision[1]);
+		V := FullMatrixSpace(field, N2,N3);
+		W := Subspace(V,secondDivision);
+		return W;
+	elif i = 2 then
+		firstDivision := List( [1..N2], j-> tensor{ [1+(N1*N3)*(j-1)..(N1*N3)*j] } );
+
+		secondDivision := [];
+		for k in firstDivision do
+			Add(secondDivision, List([1..N1],j->k{[1+N3*(j-1)..N3*j]}));
+		od;
+
+		field := DefaultFieldOfMatrix(secondDivision[1]);
+		V := FullMatrixSpace(field, N1,N3);
+		W := Subspace(V,secondDivision);
+		return W;
+	elif i = 3 then
+		firstDivision := List( [1..N3], j-> tensor{ [1+(N1*N2)*(j-1)..(N1*N2)*j] } );
+
+		secondDivision := [];
+		for k in firstDivision do
+			Add(secondDivision, List([1..N1],j->k{[1+N2*(j-1)..N2*j]}));
+		od;
+
+		field := DefaultFieldOfMatrix(secondDivision[1]);
+		V := FullMatrixSpace(field, N1,N2);
+		W := Subspace(V,secondDivision);
+		return W;
+	fi;
+
+end;
+#############################################################################
+#############################################################################
+#############################################################################

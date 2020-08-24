@@ -1,0 +1,303 @@
+#############################################################################
+#Creates the Set of All Rank-1 Matrices for Small Fields
+#############################################################################
+CreateRank1Matrices := function(field, n1, n2)
+	local V1,V2, m, m2, a, pos, result;
+	V1 := FullMatrixSpace(field, 1, n1);
+	V2 := FullMatrixSpace(field, 1, n2);
+	result := [];
+	
+	#I do not want large fields
+	if not Length(Set(field)) < 5 then
+		Error("Incompatible Lists","\n");
+	fi;
+
+	for m in Set(V1) do
+		if not m = Zero(V1) then
+			for m2 in Set(V2) do
+				if not m2 = Zero(V2) then
+					a:= TransposedMat(m)*m2;
+					Add(result,a);
+				fi;
+			od;
+		fi;
+	od;
+
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Generates the Set of Homogeneous Polynomials of Degree K
+#############################################################################
+DegreeKHomogeneousPolynomials := function(q,k)
+	local i, j, b, c, n, field, termsx, termsy, tterms, terms, coefficients, coeff, temp, polynomials, result;
+	
+	field := GF(q);
+
+	#Create all possible terms of an homogeneous polynomial
+	tterms := [];
+	termsx := List([0..q], i->-i+q);
+	termsy := [0..q];
+	for b in termsx do
+		for c in termsy do
+			Add(tterms, [b,c]);
+		od;
+	od;
+	
+	#Eliminate the terms that are not equal to k
+	terms := [];
+	for n in [1..Length(tterms)] do
+		if tterms[n][1]+tterms[n][2] = k then
+			Add(terms, tterms[n]);
+		fi;
+	od;
+	
+	#Create the all possible combinations of coefficients
+	coefficients := UnorderedTuples(Set(field),Length(terms));
+
+	#Create the Polynomials
+	polynomials := [];
+	result := [];
+	for coeff in coefficients do
+		temp := [];
+		for j in [1..Length(coeff)] do
+			if not coeff[j] = 0*One(field) then
+				Append(temp, [[coeff[j],terms[j][1],terms[j][2]]]);
+			fi;
+		od;
+		if temp in polynomials then
+			Add(result, temp);
+		else
+			Add(polynomials, temp);
+		fi;
+	od;
+	
+	
+	return polynomials;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Generates the Set of Homogeneous Polynomials Up To Degree K
+#############################################################################
+HomogeneousPolynomialsSetUpToDegreeK := function(q, k)
+	local i, a, result;
+	
+	a := k-1;
+	result := [];
+	for i in [0..a] do
+		Append(result, DegreeKHomogeneousPolynomials(q, i));
+	od;
+	
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Evaluates the Polynomial at Alpha
+#############################################################################
+Evaluation := function(polynomial, alpha)
+	local coordinate, i, j, result;
+	
+	result := [];
+	
+	coordinate := 0;
+	for i in [1..Length(alpha[1])] do
+		coordinate := 0;
+		for j in [1..Length(polynomial)] do
+			coordinate := coordinate + polynomial[j][1]*(alpha[1][i]^polynomial[j][2]);
+		od;
+		Add(result, coordinate);
+	od;
+	
+	return [result];
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+# Given the Necessary Data Generates the Cauchy Code
+#############################################################################
+CauchyCode := function(q, k, alpha, beta)
+	local V, field, polynomials, polynomial, vector, v, n, m, basis, i, vec, count, W, Z, result, set;
+
+	if not Length(alpha[1])=Length(beta[1]) then
+		Error("Incompatible Lists","\n");
+	fi;
+
+	set := [];
+	field := GF(q);
+	V := FullMatrixSpace(field, 1,Length(alpha[1]));
+	
+	#Calculate the Cauchy Code as a Set
+	polynomials := HomogeneousPolynomialsSetUpToDegreeK(q, k);
+	vector := [];
+	for polynomial in polynomials do
+		vector := [];
+		v := Evaluation(polynomial, alpha)[1];
+		for m in [1..Length(beta[1])] do
+			v[m] := v[m]*beta[1][m];
+		od;		
+		v := v*One(field);
+		Add(set, [v]);
+	od;
+	
+	basis := [set[2]];
+	#Choose a Basis
+	for i in [3..Length(set)] do
+		W := Subspace(V, basis);
+		Z := Subspace(V, [set[i]]);
+		if IsSubspace( W, Z ) = false then
+			Add(basis, set[i]);
+		fi;
+	od;
+	
+	#Create the Vector Subspace
+	result := Subspace(V, basis);
+	
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Given a Linear Code Finds a Generator Matrix
+#############################################################################
+GeneratorMatrix := function(C)
+	local basis, matrix, i;
+
+	basis := GeneratorsOfLeftOperatorAdditiveGroup(C);
+	
+	matrix := [];
+	for i in [1..Length(basis)] do
+		Add(matrix, basis[i][1]);
+	od;
+	return matrix;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+
+#############################################################################
+#Generates the Orthogonal Complement of a Linear Code, i.e, the Dual Code
+#############################################################################
+DualLinearCode := function(C)
+	local BasisOfCode, RowSpaceMatrixOfCode, RowSpaceMatrixOfDual, BasisOfOrt, vec, i, V, result;
+	
+	BasisOfCode := GeneratorsOfLeftOperatorAdditiveGroup(C);
+	RowSpaceMatrixOfCode := [];
+	for vec in BasisOfCode do
+		 Add(RowSpaceMatrixOfCode, vec[1]);
+	od;
+	
+	RowSpaceMatrixOfDual := BaseOrthogonalSpaceMat(RowSpaceMatrixOfCode);
+	BasisOfOrt := [];
+	for i in [1..Length(RowSpaceMatrixOfDual)] do
+		Add(BasisOfOrt, [RowSpaceMatrixOfDual[i]]);
+	od;
+
+	V := ParentAttr(C);
+	result := Subspace(V,BasisOfOrt);
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Given a Linear Code Finds a Parity Check Matrix
+#############################################################################			
+ParityCheckMatrix := function(C)
+	local Dual, CheckMatrix;
+	
+	Dual := DualLinearCode(C);
+	CheckMatrix := GeneratorMatrix(Dual);
+	
+	return CheckMatrix;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+
+#############################################################################
+#Given Two Matrices and a Linear Code Generates the Image of Phi(V,W)
+#############################################################################
+phi := function(V, C, W)
+	local set, c, a, b, basis, i, P, Z, O, result;
+	
+	#Calculate the New Code as a Set
+	set := [];
+	for c in C do
+		Add(set, V*DiagonalMat(c[1])*TransposedMat(W));
+	od;
+	
+	#Create the New Vector Space
+	a := DimensionsMat(V)[1];
+	b := DimensionsMat(W)[1];
+	O := FullMatrixSpace(LeftActingDomain(ParentAttr(C)),a,b);
+	
+	basis := [set[2]];
+	#Choose a Basis
+	while Length(basis) < Length(GeneratorsOfLeftOperatorAdditiveGroup(C)) do
+		for i in [3..Length(set)] do
+			P := Subspace(O, basis);
+			Z := Subspace(O, [set[i]]);
+			if IsSubspace( P, Z ) = false then
+				Add(basis, set[i]);
+			fi;
+		od;
+	od;
+
+	#Create the Vector Subspace
+	result := Subspace(O, basis);
+	
+	return result;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#Given a Code, Returns the Minimum Distance of the Code
+#############################################################################
+MinimumDistance := function(C)
+	local ranks, c;
+	
+	ranks := [];
+	for c in C do
+		Add(ranks, RankMat(c));
+	od;
+	Sort(ranks);
+	return ranks[2];
+end;
+#############################################################################
+#############################################################################
+#############################################################################
+
+#############################################################################
+#It Checks Whether a Code is MRD Code or Not
+#############################################################################
+IsMRD := function(C)
+	local Basis, Dimensions;
+	Basis := GeneratorsOfLeftOperatorAdditiveGroup(C);
+	Dimensions := DimensionsMat(Basis[1]);
+	if Length(Basis) = Dimensions[1]*(Dimensions[2]-MinimumDistance(C)+1) then
+		return true;
+	else
+		return false;
+	fi;
+end;
+#############################################################################
+#############################################################################
+#############################################################################
